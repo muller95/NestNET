@@ -13,6 +13,7 @@ namespace NestNET
         public NestPoint[][] points;
         private int initPrims = 16, initPoints = 1024;
         private int nmbPrims, nmbPoints;
+        private bool isFigure;
         public NestFigure(string path)
         {
             XmlDocument doc = new XmlDocument();
@@ -24,6 +25,8 @@ namespace NestNET
 
             for (int i = 0; i < root.ChildNodes.Count; i++)
                 ParseNode(root.ChildNodes[i], "1_0_0_0_1_0_0_0_1");
+
+            Array.Resize(ref points, nmbPrims);
         }
 
         private string[] GetTransformInfo(string transform)
@@ -100,6 +103,7 @@ namespace NestNET
         {
             string[] transforms = transformAttr.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             string result = "";
+            
             for (int i = 0; i < transforms.Length; i++)
             {
                 string[] info = GetTransformInfo(transforms[i]);
@@ -148,7 +152,7 @@ namespace NestNET
             for (int i = 0; i < 3; i++)
                 for (int j = 0; j < 3; j++)
                     for (int r = 0; r < 3; r++)
-                        result[i, j] = matrix1[i, r] * matrix2[r, j];
+                        result[i, j] += matrix1[i, r] * matrix2[r, j];
 
             return result;
         }
@@ -193,6 +197,7 @@ namespace NestNET
                 if (nmbPoints == points[nmbPrims].Length)
                     Array.Resize(ref points[nmbPrims], nmbPoints * 2);
             }
+            isFigure = true;
         }
 
         private void EllipseToPoints(XmlNode node, string transform)
@@ -205,7 +210,7 @@ namespace NestNET
             cx = double.Parse(node.Attributes["cx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
             cy = double.Parse(node.Attributes["cy"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
             rx = double.Parse(node.Attributes["rx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
-            ry = double.Parse(node.Attributes["rx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            ry = double.Parse(node.Attributes["ry"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
             len = (4 * Math.PI * rx * ry + Math.Pow(rx - ry, 2)) / (rx + ry);
             step = 1.0 / (2 * Math.PI * len);
 
@@ -218,6 +223,7 @@ namespace NestNET
                 if (nmbPoints == points[nmbPrims].Length)
                     Array.Resize(ref points[nmbPrims], nmbPoints * 2);
             }
+            isFigure = true;
         }
 
         private void LineToPoints(XmlNode node, string transform)
@@ -233,8 +239,13 @@ namespace NestNET
 
             points[nmbPrims][nmbPoints] = new NestPoint(x1, y1);
             points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+            if (nmbPoints == points[nmbPrims].Length)
+                Array.Resize(ref points[nmbPrims], nmbPoints * 2);
             points[nmbPrims][nmbPoints] = new NestPoint(x2, y2);
             points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+            if (nmbPoints == points[nmbPrims].Length)
+                Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+            isFigure = true;
         }
 
         private void PolylineToPoints(XmlNode node, string transform)
@@ -244,13 +255,16 @@ namespace NestNET
 
             matrix = MultiplyTransforms(transform);
 
-            for (int i = 0; i < coordinates.Length; i++)
+            for (int i = 0; i < coordinates.Length; i += 2)
             {
                 double x = double.Parse(coordinates[i], NumberStyles.Any, CultureInfo.InvariantCulture);
                 double y = double.Parse(coordinates[i + 1], NumberStyles.Any, CultureInfo.InvariantCulture);
                 points[nmbPrims][nmbPoints] = new NestPoint(x, y);
                 points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                if (nmbPoints == points[nmbPrims].Length)
+                    Array.Resize(ref points[nmbPrims], nmbPoints * 2);
             }
+            isFigure = true;
         }
 
         private void PolygonToPoints(XmlNode node, string transform)
@@ -260,16 +274,18 @@ namespace NestNET
 
             matrix = MultiplyTransforms(transform);
 
-            for (int i = 0; i < coordinates.Length; i++)
+            for (int i = 0; i < coordinates.Length; i += 2)
             {
                 double x = double.Parse(coordinates[i], NumberStyles.Any, CultureInfo.InvariantCulture);
                 double y = double.Parse(coordinates[i + 1], NumberStyles.Any, CultureInfo.InvariantCulture);
                 points[nmbPrims][nmbPoints] = new NestPoint(x, y);
                 points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                if (nmbPoints == points[nmbPrims].Length)
+                    Array.Resize(ref points[nmbPrims], nmbPoints * 2);
             }
 
-            points[nmbPrims][nmbPoints] = points[nmbPrims][0].Clone();
-            points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+            points[nmbPrims][nmbPoints++] = points[nmbPrims][0].Clone();
+            isFigure = true;
         }
 
 
@@ -277,6 +293,7 @@ namespace NestNET
         {
             nmbPoints = 0;
             points[nmbPrims] = new NestPoint[initPoints];
+            isFigure = false;
             switch (node.Name)
             {
                 case "rect":
@@ -291,13 +308,19 @@ namespace NestNET
                     LineToPoints(node, transform);
                     break;
                 case "polyline":
+                    PolylineToPoints(node, transform);
                     break;
                 case "polygon":
+                    PolygonToPoints(node, transform);
                     break;
             }
-            Array.Resize(ref points[nmbPrims++], nmbPoints);
-            if (nmbPrims == points.Length)
-                Array.Resize(ref points, nmbPrims * 2);
+
+            if (isFigure)
+            {
+                Array.Resize(ref points[nmbPrims++], nmbPoints);
+                if (nmbPrims == points.Length)
+                    Array.Resize(ref points, nmbPrims * 2);
+            }
 
         }
 
