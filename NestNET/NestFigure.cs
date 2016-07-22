@@ -10,7 +10,7 @@ namespace NestNET
 {
     class NestFigure
     {
-        private NestPoint[][] points;
+        public NestPoint[][] points;
         private int initPrims = 16, initPoints = 1024;
         private int nmbPrims, nmbPoints;
         public NestFigure(string path)
@@ -129,27 +129,151 @@ namespace NestNET
             return result.Trim();
         }
 
-        private void CircleToPoints(XmlNode node)
+        private double[,] MatrixFromString(string transform)
+        {
+            double[,] matrix = new double[3, 3];
+
+            string[] vals = transform.Split(new char[] { '_' });
+
+            for (int i = 0; i < vals.Length; i++)
+                matrix[i / 3, i % 3] = double.Parse(vals[i], NumberStyles.Any, CultureInfo.InvariantCulture);
+
+            return matrix;
+        }
+
+        private double[,] MultiplyMatrixes(double[,] matrix1, double[,] matrix2)
+        {
+            double[,] result = new double[3, 3];
+
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                    for (int r = 0; r < 3; r++)
+                        result[i, j] = matrix1[i, r] * matrix2[r, j];
+
+            return result;
+        }
+
+        private double[,] MultiplyTransforms(string transform)
+        {
+            double[,] matrix1 = new double[3, 3];
+
+            for (int i = 0; i < 3; i++)
+                matrix1[i, i] = 1;
+
+            string[] transforms = transform.Split(new Char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                double[,] matrix2 = MatrixFromString(transforms[i]);
+                matrix1 = MultiplyMatrixes(matrix1, matrix2);
+            }
+
+            return matrix1;
+        }
+
+        private void CircleToPoints(XmlNode node, string transform)
         {
             double cx, cy, r;
-            double step;
+            double step, len;
+            double[,] matrix;
 
-            cx = Double.Parse(node.Attributes["cx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
-            cy = Double.Parse(node.Attributes["cy"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
-            r = Double.Parse(node.Attributes["r"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
-            step = 1.0 / (2 * Math.PI * r);
+            matrix = MultiplyTransforms(transform);
+            cx = double.Parse(node.Attributes["cx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            cy = double.Parse(node.Attributes["cy"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            r = double.Parse(node.Attributes["r"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            len = 2 * Math.PI * r;
+            step = 1.0 / len;
+
             for (double t = 0.0; t <= 2 * Math.PI; t += step)
             {
                 double x = r * Math.Cos(t) + cx;
                 double y = r * Math.Sin(t) + cy;
-                points[nmbPrims][nmbPoints++] = new NestPoint(x, y);
+                points[nmbPrims][nmbPoints] = new NestPoint(x, y);
+                points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
                 if (nmbPoints == points[nmbPrims].Length)
                     Array.Resize(ref points[nmbPrims], nmbPoints * 2);
             }
-
         }
 
-        private void ApproxIfFigure(XmlNode node)
+        private void EllipseToPoints(XmlNode node, string transform)
+        {
+            double cx, cy, rx, ry;
+            double step, len;
+            double[,] matrix;
+            
+            matrix = MultiplyTransforms(transform);
+            cx = double.Parse(node.Attributes["cx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            cy = double.Parse(node.Attributes["cy"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            rx = double.Parse(node.Attributes["rx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            ry = double.Parse(node.Attributes["rx"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            len = (4 * Math.PI * rx * ry + Math.Pow(rx - ry, 2)) / (rx + ry);
+            step = 1.0 / (2 * Math.PI * len);
+
+            for (double t = 0.0; t <= 2 * Math.PI; t += step)
+            {
+                double x = rx * Math.Cos(t) + cx;
+                double y = ry * Math.Sin(t) + cy;
+                points[nmbPrims][nmbPoints] = new NestPoint(x, y);
+                points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                if (nmbPoints == points[nmbPrims].Length)
+                    Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+            }
+        }
+
+        private void LineToPoints(XmlNode node, string transform)
+        {
+            double x1, y1, x2, y2;
+            double[,] matrix;
+
+            matrix = MultiplyTransforms(transform);
+            x1 = double.Parse(node.Attributes["x1"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            y1 = double.Parse(node.Attributes["y1"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            x2 = double.Parse(node.Attributes["x2"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+            y2 = double.Parse(node.Attributes["y2"].Value, NumberStyles.Any, CultureInfo.InvariantCulture);
+
+            points[nmbPrims][nmbPoints] = new NestPoint(x1, y1);
+            points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+            points[nmbPrims][nmbPoints] = new NestPoint(x2, y2);
+            points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+        }
+
+        private void PolylineToPoints(XmlNode node, string transform)
+        {
+            double[,] matrix;
+            string[] coordinates = node.Attributes["points"].Value.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            matrix = MultiplyTransforms(transform);
+
+            for (int i = 0; i < coordinates.Length; i++)
+            {
+                double x = double.Parse(coordinates[i], NumberStyles.Any, CultureInfo.InvariantCulture);
+                double y = double.Parse(coordinates[i + 1], NumberStyles.Any, CultureInfo.InvariantCulture);
+                points[nmbPrims][nmbPoints] = new NestPoint(x, y);
+                points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+            }
+        }
+
+        private void PolygonToPoints(XmlNode node, string transform)
+        {
+            double[,] matrix;
+            string[] coordinates = node.Attributes["points"].Value.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            matrix = MultiplyTransforms(transform);
+
+            for (int i = 0; i < coordinates.Length; i++)
+            {
+                double x = double.Parse(coordinates[i], NumberStyles.Any, CultureInfo.InvariantCulture);
+                double y = double.Parse(coordinates[i + 1], NumberStyles.Any, CultureInfo.InvariantCulture);
+                points[nmbPrims][nmbPoints] = new NestPoint(x, y);
+                points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+            }
+
+            points[nmbPrims][nmbPoints] = points[nmbPrims][0].Clone();
+            points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+        }
+
+
+        private void ApproxIfFigure(XmlNode node, string transform)
         {
             nmbPoints = 0;
             points[nmbPrims] = new NestPoint[initPoints];
@@ -158,11 +282,13 @@ namespace NestNET
                 case "rect":
                     break;
                 case "circle":
-                    CircleToPoints(node);
+                    CircleToPoints(node, transform);
                     break;
                 case "ellipse":
+                    EllipseToPoints(node, transform);
                     break;
                 case "line":
+                    LineToPoints(node, transform);
                     break;
                 case "polyline":
                     break;
@@ -172,7 +298,7 @@ namespace NestNET
             Array.Resize(ref points[nmbPrims++], nmbPoints);
             if (nmbPrims == points.Length)
                 Array.Resize(ref points, nmbPrims * 2);
-            
+
         }
 
         private void ParseNode(XmlNode node, string transform)
@@ -180,9 +306,9 @@ namespace NestNET
             if (node.Attributes != null)
                 for (int i = 0; i < node.Attributes.Count; i++)
                     if (node.Attributes[i].Name == "transform")
-                        transform += ParseTransformAttr(node.Attributes[i].Value);
+                        transform += " " + ParseTransformAttr(node.Attributes[i].Value);
 
-            ApproxIfFigure(node);
+            ApproxIfFigure(node, transform);
 
             for (int i = 0; i < node.ChildNodes.Count; i++)
                 ParseNode(node.ChildNodes[i], transform);
