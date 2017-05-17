@@ -34,6 +34,11 @@ namespace NestNET
             {
                 return x;
             }
+
+            set
+            {
+                x = value;
+            }
         }
 
         public double Y
@@ -42,6 +47,19 @@ namespace NestNET
             {
                 return y;
             }
+
+            set
+            {
+                y = value;
+            }
+        }
+
+        public static NestPoint operator +(NestPoint a, NestPoint b) 
+        {
+            double newx = a.x + b.x;
+            double newy = a.y + b.y;
+            
+            return new NestPoint(newx, newy);
         }
     }
 }

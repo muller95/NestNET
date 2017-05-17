@@ -104,7 +104,7 @@ namespace NestNET
         {
             string[] transforms = transformAttr.Split(new char[] { ')' }, StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < transforms.Length; i++)
-                transforms[i] += ")";
+                transforms[i] = (transforms[i] + ")").Trim();
             return transforms;
         }
 
@@ -299,6 +299,77 @@ namespace NestNET
         }
 
 
+        private void RelToAbsLine(NestPoint[] points, NestPoint curr) {
+            points[0] = points[0] + curr;
+            for (int i = 1; i < points.Length; i++)
+                points[i] = points[i] + points[i - 1];
+        }
+
+        private void PathToPoints(XmlNode node, string transform)
+        {
+            string commandSet = "mMlLzZhHvVcCsSqQtTaA";
+            string cmdStr = node.Attributes["d"].Value.Trim().Replace("-", ",-");
+
+            double[,] matrix = MultiplyTransforms(transform);
+
+            if (cmdStr.Substring(0, 1) == ",") {
+                cmdStr = cmdStr.Substring(1);
+            }
+            cmdStr = cmdStr.Replace(" ", ",");
+            cmdStr = cmdStr.Replace(",,", ",");
+            cmdStr = cmdStr.Replace("e,", "e");
+            
+            string[] commands = cmdStr.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            NestPoint frist = new NestPoint(0, 0);
+            NestPoint curr = new NestPoint(0, 0);
+            for (int i = 0; i < commands.Length;) {
+                string cmd = commands[i++];                
+                switch (cmd) {
+                    case "m":
+                    case "M":
+                    case "l":
+                    case "L":
+                        int len = 0; 
+                        for (int j = i; j < commands.Length; j += 2, len += 1)
+                            if (commandSet.IndexOf(commands[j]) >= 0)
+                                break;
+                        
+                        Console.WriteLine(len);
+                        NestPoint[] points = new NestPoint[len];
+                        for (int j = 0; i < commands.Length; i += 2, j++) {
+                            if (commandSet.IndexOf(commands[i]) >= 0)
+                                break;
+                            Console.WriteLine(commands[i] + " " + commands[i + 1]);
+                            double x = Convert.ToDouble(commands[i].Replace(".", ","));
+                            double y = Convert.ToDouble(commands[i + 1].Replace(".", ","));
+                            points[j] = new NestPoint(x, y);
+                        }
+                        
+                        if ("ml".IndexOf(cmd) >= 0)
+                            RelToAbsLine(points, curr);
+                        
+                        if (points.Length > 1 | "lL".IndexOf(cmd) >= 0)
+                            for (int j = 0; j < points.Length; j++) {
+                                
+                            }
+                        /*
+                        pt_count = args2points(args, points)
+                        if (cmds[j] ~ /m|l/) {
+                            rel2abs_line(currpt, points)
+                        }
+
+                        if (pt_count > 1 || cmds[j] ~ /l|L/) {
+                            out = out lineto(currpt, points, cmds[j] ~ /m|M/ ? 1 : 0, matrix) "\n\n"
+                        }
+                        firstpt = cmds[j] ~ /m|M/ ? points[1] : firstpt
+                        currpt = points[pt_count]
+                        */
+                        break;
+                }
+            }
+        }
+
+
         private void ApproxIfFigure(XmlNode node, string transform)
         {
             nmbPoints = 0;
@@ -324,7 +395,7 @@ namespace NestNET
                     PolygonToPoints(node, transform);
                     break;
                 case "path":
-                    Console.WriteLine("@GOT PATH");
+                    PathToPoints(node, transform);
                     break;
             }
 
