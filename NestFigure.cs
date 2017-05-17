@@ -31,6 +31,7 @@ namespace NestNET
 
         private string[] GetTransformInfo(string transform)
         {
+            Console.WriteLine("@TRANSFORM " + transform);
             int start = 0;
             int len = transform.IndexOf('(');
             string name = transform.Substring(start, len);
@@ -99,9 +100,18 @@ namespace NestNET
             return String.Format("1_0_0_{0}_1_0_0_0_1", tan);
         }
 
+        private string[] SplitTransforms(string transformAttr)
+        {
+            string[] transforms = transformAttr.Split(new char[] { ')' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < transforms.Length; i++)
+                transforms[i] += ")";
+            return transforms;
+        }
+
         private string ParseTransformAttr(string transformAttr)
         {
-            string[] transforms = transformAttr.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            // string[] transforms = transformAttr.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] transforms = SplitTransforms(transformAttr);
             string result = "";
             
             for (int i = 0; i < transforms.Length; i++)
@@ -312,6 +322,9 @@ namespace NestNET
                     break;
                 case "polygon":
                     PolygonToPoints(node, transform);
+                    break;
+                case "path":
+                    Console.WriteLine("@GOT PATH");
                     break;
             }
 
