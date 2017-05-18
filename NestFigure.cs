@@ -31,7 +31,6 @@ namespace NestNET
 
         private string[] GetTransformInfo(string transform)
         {
-            Console.WriteLine("@TRANSFORM " + transform);
             int start = 0;
             int len = transform.IndexOf('(');
             string name = transform.Substring(start, len);
@@ -305,13 +304,12 @@ namespace NestNET
                 points[i] = points[i] + points[i - 1];
         }
 
-        private void PathToPoints(XmlNode node, string transform)
+        private List<List<Tuple<string, double[]>>> GetSubpaths(string cmdStr) 
         {
+            List<List<Tuple<string, double[]>>> result = new List<List<Tuple<string, double[]>>>();
+            List<Tuple<string, double[]>> subPath = new List<Tuple<string, double[]>>();            
             string commandSet = "mMlLzZhHvVcCsSqQtTaA";
-            string cmdStr = node.Attributes["d"].Value.Trim().Replace("-", ",-");
-
-            double[,] matrix = MultiplyTransforms(transform);
-
+            cmdStr = cmdStr.Trim().Replace("-", ",-");;
             if (cmdStr.Substring(0, 1) == ",") {
                 cmdStr = cmdStr.Substring(1);
             }
@@ -319,54 +317,127 @@ namespace NestNET
             cmdStr = cmdStr.Replace(",,", ",");
             cmdStr = cmdStr.Replace("e,", "e");
             
-            string[] commands = cmdStr.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-            NestPoint frist = new NestPoint(0, 0);
-            NestPoint curr = new NestPoint(0, 0);
-            for (int i = 0; i < commands.Length;) {
-                string cmd = commands[i++];                
-                switch (cmd) {
-                    case "m":
-                    case "M":
-                    case "l":
-                    case "L":
-                        int len = 0; 
-                        for (int j = i; j < commands.Length; j += 2, len += 1)
-                            if (commandSet.IndexOf(commands[j]) >= 0)
-                                break;
-                        
-                        Console.WriteLine(len);
-                        NestPoint[] points = new NestPoint[len];
-                        for (int j = 0; i < commands.Length; i += 2, j++) {
-                            if (commandSet.IndexOf(commands[i]) >= 0)
-                                break;
-                            Console.WriteLine(commands[i] + " " + commands[i + 1]);
-                            double x = Convert.ToDouble(commands[i].Replace(".", ","));
-                            double y = Convert.ToDouble(commands[i + 1].Replace(".", ","));
-                            points[j] = new NestPoint(x, y);
-                        }
-                        
-                        if ("ml".IndexOf(cmd) >= 0)
-                            RelToAbsLine(points, curr);
-                        
-                        if (points.Length > 1 | "lL".IndexOf(cmd) >= 0)
-                            for (int j = 0; j < points.Length; j++) {
-                                
-                            }
-                        /*
-                        pt_count = args2points(args, points)
-                        if (cmds[j] ~ /m|l/) {
-                            rel2abs_line(currpt, points)
-                        }
+            for (int i = 0; i < cmdStr.Length;) {
+                string cmd = cmdStr.Substring(i, 1);
+                string argsStr = "", curr = "";
+                if (commandSet.IndexOf(cmd) >= 0) {
+                    i++;
+                    for (; i < cmdStr.Length; i++) {
+                        curr = cmdStr.Substring(i, 1);
+                        if (commandSet.IndexOf(curr) >= 0)
+                            break;
+                        argsStr += cmdStr.Substring(i, 1);
+                    }
 
-                        if (pt_count > 1 || cmds[j] ~ /l|L/) {
-                            out = out lineto(currpt, points, cmds[j] ~ /m|M/ ? 1 : 0, matrix) "\n\n"
-                        }
-                        firstpt = cmds[j] ~ /m|M/ ? points[1] : firstpt
-                        currpt = points[pt_count]
-                        */
-                        break;
                 }
+                
+                string[] argsStrArr = argsStr.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                double[] args = new double[argsStrArr.Length];
+                for (int j = 0; j < args.Length; j++)
+                    args[j] = Convert.ToDouble(argsStrArr[j].Replace(".", ","));
+                subPath.Add(new Tuple<string, double[]>(cmd, args));
+                if ("mM".IndexOf(curr) >= 0) {
+                    result.Add(subPath);
+                    subPath = new List<Tuple<string, double[]>>();
+                } 
             }
+
+            result.Add(subPath);
+
+            return result;
+        }
+
+        private void PathToPoints(XmlNode node, string transform)
+        {
+            Console.WriteLine("@PARSE PATH");
+            double[,] matrix = MultiplyTransforms(transform);
+            
+            string cmdStr = node.Attributes["d"].Value;
+            
+            List<List<Tuple<string, double[]>>> subPaths = GetSubpaths(cmdStr);
+            NestPoint first = new NestPoint(0, 0);
+            NestPoint curr = new NestPoint(0, 0);
+            for (int s = 0; s < subPaths.Count; s++) {
+                List<Tuple<string, double[]>> commands = subPaths[s];
+                points[nmbPrims] = new NestPoint[initPoints];
+                for (int i = 0; i < commands.Count; i++) {
+                    NestPoint[] pathPoints;
+                    string cmd = commands[i].Item1;
+                    double[] args = commands[i].Item2;            
+
+                    switch (commands[i].Item1) {
+                        case "m":
+                        case "M":
+                        case "l":
+                        case "L":
+                            pathPoints = new NestPoint[args.Length / 2];
+                            for (int j = 0; j < args.Length; j += 2) 
+                                pathPoints[j/2] = new NestPoint(args[j], args[j + 1]);
+
+                            if ("ml".IndexOf(cmd) >= 0)
+                                RelToAbsLine(pathPoints, curr);
+
+                            if (pathPoints.Length > 1 | "lL".IndexOf(cmd) >= 0) {
+                                for (int j = 0; j < pathPoints.Length; j++) {
+                                    points[nmbPrims][nmbPoints] = pathPoints[j].Clone();
+                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                    Console.WriteLine("@ " + pathPoints[j].X + " " + pathPoints[j].Y);
+                                    if (nmbPoints == points[nmbPrims].Length)
+                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                                }
+                            }
+                            first = ("mM".IndexOf(cmd) >= 0) ? pathPoints[0].Clone() : first;
+                            curr = pathPoints[pathPoints.Length - 1].Clone();
+                            break;
+
+                        case "z":
+                        case "Z":
+                            points[nmbPrims][nmbPoints] = first.Clone();
+                            points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                            if (nmbPoints == points[nmbPrims].Length)
+                                Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                            curr = first.Clone();
+                            break;
+
+                        case "v":
+                        case "V":
+                        case "h":
+                        case "H":
+                            pathPoints = new NestPoint[args.Length];
+                            for (int j = 0; j < args.Length; j++) {
+                                if (cmd == "v")
+                                    pathPoints[j] = new NestPoint(0, args[j]);
+                                else if (cmd == "V")
+                                    pathPoints[j] = new NestPoint(curr.X, args[j]);
+                                else if (cmd == "h")
+                                    pathPoints[j] = new NestPoint(args[j], 0);
+                                else if (cmd == "H")
+                                    pathPoints[j] = new NestPoint(args[j], curr.Y);                  
+                            }
+
+                            if ("vh".IndexOf(cmd) >= 0)
+                                RelToAbsLine(pathPoints, curr);
+                            for (int j = 0; j < pathPoints.Length; j++) {
+                                points[nmbPrims][nmbPoints] = pathPoints[j].Clone();
+                                points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                if (nmbPoints == points[nmbPrims].Length)
+                                    Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                            }
+                            
+                            curr = pathPoints[pathPoints.Length - 1].Clone();                    
+                        break;
+                    }
+                }
+
+                Array.Resize(ref points[nmbPrims], nmbPoints);
+                if (nmbPoints > 0)
+                    nmbPrims++;
+                nmbPoints = 0;
+                if (nmbPrims == points.Length)
+                    Array.Resize(ref points, nmbPrims * 2);
+            }
+            
+            //isFigure = true;
         }
 
 
@@ -401,7 +472,8 @@ namespace NestNET
 
             if (isFigure)
             {
-                Array.Resize(ref points[nmbPrims++], nmbPoints);
+                Array.Resize(ref points[nmbPrims], nmbPoints);
+                nmbPrims++;
                 if (nmbPrims == points.Length)
                     Array.Resize(ref points, nmbPrims * 2);
             }

@@ -14,15 +14,14 @@ namespace NestNET
         
         static void Main(string[] args)
         {
-            for (int f = 0; f < figs.Length; f++) {
+            for (int f = 1; f < 2; f++) {
                 Console.WriteLine("@DO " + figs[f]);
                 NestFigure fig = new NestFigure(prefix + figs[f]);
                 Bitmap bmp = new Bitmap(746, 1056);
                 Graphics graphContext = Graphics.FromImage(bmp);
 
-
                 graphContext.Clear(Color.White);
-                for (int i = 0; i < fig.points.Length; i++)
+                for (int i = 0; i < fig.points.Length; i++) {
                     for (int j = 0; j < fig.points[i].Length - 1; j++)
                     {
                         float x1, y1, x2, y2;
@@ -32,8 +31,9 @@ namespace NestNET
                         y2 = (float)fig.points[i][j + 1].Y;
                         graphContext.DrawLine(new Pen(Color.Black, 1.0f), x1, y1, x2, y2); 
                     }
+                }
 
-                bmp.Save(figs[f].Split(new char[] { '.' }, StringSplitOptions.RemoveEmptyEntries)[0] + ".png");
+                bmp.Save("out/" + figs[f].Split(new char[] { '.' }, StringSplitOptions.RemoveEmptyEntries)[0] + ".png");
             }
         }
     }
