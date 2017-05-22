@@ -311,7 +311,7 @@ namespace NestNET
             NestPoint c = curr.Clone();
             for (int i = 0; i < points.Length; i += degree) 
             {
-                for (int j = 0; j < points.Length; j++)
+                for (int j = 0; j < degree; j++)
                     points[i + j] = points[i + j] + c;
                 c = points[i + degree - 1].Clone();
             }
@@ -393,7 +393,6 @@ namespace NestNET
                     double[] args = commands[i].Item2;            
                     int degree;
                     
-                    Console.WriteLine("@CMD" + cmd);
                     switch (cmd) {
                         case "m":
                         case "M":
@@ -473,7 +472,7 @@ namespace NestNET
                             degree = ("cC".IndexOf(cmd) >= 0) ? 3 : 2;
                             if ("cq".IndexOf(cmd) >= 0)
                                 RelToAbsBezier(pathPoints, curr, degree);
-
+                            
                             for (int j = 0; j < pathPoints.Length; j+=degree)
                             {
                                 NestPoint[] p;
@@ -487,11 +486,11 @@ namespace NestNET
                                         points[nmbPrims][nmbPoints] = calcBezier3Point(p, t);
                                     } else
                                         points[nmbPrims][nmbPoints] = calcBezier2Point(p, t);
+                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                        
                                     
                                     if (nmbPoints == points[nmbPrims].Length)
-                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);
-                                    
-                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);                                    
                                 }
 
                                 curr = p[p.Length - 1].Clone();

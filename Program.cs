@@ -14,7 +14,7 @@ namespace NestNET
         
         static void Main(string[] args)
         {
-            for (int f = 1; f < 2; f++) {
+            for (int f = 0; f < figs.Length; f++) {
                 Console.WriteLine("@DO " + figs[f]);
                 NestFigure fig = new NestFigure(prefix + figs[f]);
                 Bitmap bmp = new Bitmap(746, 1056);
