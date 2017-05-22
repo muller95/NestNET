@@ -54,10 +54,31 @@ namespace NestNET
             }
         }
 
+        public override string ToString() 
+        {
+            return String.Format("({0}, {1})", x, y);
+        }
+
         public static NestPoint operator +(NestPoint a, NestPoint b) 
         {
             double newx = a.x + b.x;
             double newy = a.y + b.y;
+            
+            return new NestPoint(newx, newy);
+        }
+
+        public static NestPoint operator *(double c, NestPoint p) 
+        {
+            double newx = c * p.x;
+            double newy = c * p.y;
+
+            return new NestPoint(newx, newy);
+        }
+
+        public static NestPoint operator -(NestPoint a, NestPoint b) 
+        {
+            double newx = a.x - b.x;
+            double newy = a.y - b.y;
             
             return new NestPoint(newx, newy);
         }

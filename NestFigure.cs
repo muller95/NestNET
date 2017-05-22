@@ -14,6 +14,7 @@ namespace NestNET
         private int initPrims = 16, initPoints = 1024;
         private int nmbPrims, nmbPoints;
         private bool isFigure;
+        private double tstep = 0.01;
         public NestFigure(string path)
         {
             XmlDocument doc = new XmlDocument();
@@ -298,10 +299,22 @@ namespace NestNET
         }
 
 
-        private void RelToAbsLine(NestPoint[] points, NestPoint curr) {
+        private void RelToAbsLine(NestPoint[] points, NestPoint curr) 
+        {
             points[0] = points[0] + curr;
             for (int i = 1; i < points.Length; i++)
                 points[i] = points[i] + points[i - 1];
+        }
+
+        private void RelToAbsBezier(NestPoint[] points, NestPoint curr, int degree)
+        {
+            NestPoint c = curr.Clone();
+            for (int i = 0; i < points.Length; i += degree) 
+            {
+                for (int j = 0; j < points.Length; j++)
+                    points[i + j] = points[i + j] + c;
+                c = points[i + degree - 1].Clone();
+            }
         }
 
         private List<List<Tuple<string, double[]>>> GetSubpaths(string cmdStr) 
@@ -347,6 +360,16 @@ namespace NestNET
             return result;
         }
 
+        private NestPoint calcBezier3Point(NestPoint[] p, double t) 
+        {
+            return (1 - t)*(1 - t)*(1 - t) * p[0] + 3*t * (1 - t)*(1 - t) * p[1] + 3*t*t * (1 - t) * p[2] + t*t*t * p[3];
+        }
+
+        private NestPoint calcBezier2Point(NestPoint[] p, double t) 
+        {
+            return (1 - t)*(1 - t) * p[0] + 2*t * (1 - t) * p[1] + t*t * p[2];
+        }
+
         private void PathToPoints(XmlNode node, string transform)
         {
             Console.WriteLine("@PARSE PATH");
@@ -357,6 +380,10 @@ namespace NestNET
             List<List<Tuple<string, double[]>>> subPaths = GetSubpaths(cmdStr);
             NestPoint first = new NestPoint(0, 0);
             NestPoint curr = new NestPoint(0, 0);
+            NestPoint prev = new NestPoint(0, 0);
+            bool prevCubic, prevQuadr;
+            prevCubic = prevQuadr = false;
+            
             for (int s = 0; s < subPaths.Count; s++) {
                 List<Tuple<string, double[]>> commands = subPaths[s];
                 points[nmbPrims] = new NestPoint[initPoints];
@@ -364,8 +391,10 @@ namespace NestNET
                     NestPoint[] pathPoints;
                     string cmd = commands[i].Item1;
                     double[] args = commands[i].Item2;            
-
-                    switch (commands[i].Item1) {
+                    int degree;
+                    
+                    Console.WriteLine("@CMD" + cmd);
+                    switch (cmd) {
                         case "m":
                         case "M":
                         case "l":
@@ -381,14 +410,16 @@ namespace NestNET
                                 for (int j = 0; j < pathPoints.Length; j++) {
                                     points[nmbPrims][nmbPoints] = pathPoints[j].Clone();
                                     points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
-                                    Console.WriteLine("@ " + pathPoints[j].X + " " + pathPoints[j].Y);
                                     if (nmbPoints == points[nmbPrims].Length)
                                         Array.Resize(ref points[nmbPrims], nmbPoints * 2);
                                 }
                             }
                             first = ("mM".IndexOf(cmd) >= 0) ? pathPoints[0].Clone() : first;
                             curr = pathPoints[pathPoints.Length - 1].Clone();
-                            break;
+
+                            prevCubic = prevQuadr = false;
+                            
+                        break;
 
                         case "z":
                         case "Z":
@@ -397,7 +428,9 @@ namespace NestNET
                             if (nmbPoints == points[nmbPrims].Length)
                                 Array.Resize(ref points[nmbPrims], nmbPoints * 2);
                             curr = first.Clone();
-                            break;
+
+                            prevCubic = prevQuadr = false;
+                        break;
 
                         case "v":
                         case "V":
@@ -424,9 +457,110 @@ namespace NestNET
                                     Array.Resize(ref points[nmbPrims], nmbPoints * 2);
                             }
                             
-                            curr = pathPoints[pathPoints.Length - 1].Clone();                    
+                            curr = pathPoints[pathPoints.Length - 1].Clone();
+
+                            prevCubic = prevQuadr = false;                                                
+                        break;
+
+                        case "c":
+                        case "C":
+                        case "q":
+                        case "Q":
+                            pathPoints = new NestPoint[args.Length / 2];
+                            for (int j = 0; j < args.Length; j += 2) 
+                                pathPoints[j/2] = new NestPoint(args[j], args[j + 1]);
+                            
+                            degree = ("cC".IndexOf(cmd) >= 0) ? 3 : 2;
+                            if ("cq".IndexOf(cmd) >= 0)
+                                RelToAbsBezier(pathPoints, curr, degree);
+
+                            for (int j = 0; j < pathPoints.Length; j+=degree)
+                            {
+                                NestPoint[] p;
+                                if (degree == 3) 
+                                    p = new NestPoint[]{ curr.Clone(), pathPoints[j].Clone(), pathPoints[j + 1].Clone(), pathPoints[j + 2].Clone() };
+                                else
+                                    p = new NestPoint[]{ curr.Clone(), pathPoints[j].Clone(), pathPoints[j + 1].Clone() };
+                                for (double t = 0.0; t <= 1.0; t += tstep) 
+                                {
+                                    if (degree == 3) {
+                                        points[nmbPrims][nmbPoints] = calcBezier3Point(p, t);
+                                    } else
+                                        points[nmbPrims][nmbPoints] = calcBezier2Point(p, t);
+                                    
+                                    if (nmbPoints == points[nmbPrims].Length)
+                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                                    
+                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                }
+
+                                curr = p[p.Length - 1].Clone();
+                                prev = p[p.Length - 2].Clone();
+                            }
+                            
+                            if ("cC".IndexOf(cmd) >= 0) {
+                                prevCubic = true;
+                                prevQuadr = false;
+                            } else if ("qQ".IndexOf(cmd) >= 0) {
+                                prevCubic = false;
+                                prevQuadr = true;
+                            }
+                            
+                        break;
+                        
+                        case "s":
+                        case "S":
+                        case "t":
+                        case "T":
+                            pathPoints = new NestPoint[args.Length / 2];
+                            for (int j = 0; j < args.Length; j += 2) 
+                                pathPoints[j/2] = new NestPoint(args[j], args[j + 1]);
+
+                            degree = ("sS".IndexOf(cmd) >= 0) ? 2 : 1;
+                            if ("st".IndexOf(cmd) >= 0)
+                                RelToAbsBezier(pathPoints, curr, degree);
+                            
+                            if (("sScC".IndexOf(cmd) >= 0 && !prevCubic) || ("tTqQ".IndexOf(cmd) >= 0 && !prevQuadr))
+                                prev = curr.Clone();
+
+                            for (int j = 0; j < pathPoints.Length; j += degree)
+                            {
+                                NestPoint[] p;
+                                NestPoint cp = curr + curr - prev;
+                                if (degree == 2) 
+                                    p = new NestPoint[]{ curr.Clone(), cp.Clone(), pathPoints[j].Clone(), pathPoints[j + 1].Clone() };
+                                else
+                                    p = new NestPoint[]{ curr.Clone(), cp.Clone(), pathPoints[j].Clone() };
+
+                                for (double t = 0.0; t <= 1.0; t += tstep) 
+                                {
+                                    if (degree == 2) {
+                                        points[nmbPrims][nmbPoints] = calcBezier3Point(p, t);
+                                    } else
+                                        points[nmbPrims][nmbPoints] = calcBezier2Point(p, t);
+                                    
+                                    if (nmbPoints == points[nmbPrims].Length)
+                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                                    
+                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+
+                                    curr = p[p.Length - 1].Clone();
+                                    prev = p[p.Length - 2].Clone();
+                                }
+                            }
+
+                            if ("sS".IndexOf(cmd) >= 0) {
+                                prevCubic = true;
+                                prevQuadr = false;
+                            } else if ("tT".IndexOf(cmd) >= 0) {
+                                prevCubic = false;
+                                prevQuadr = true;
+                            }
+
                         break;
                     }
+
+                    
                 }
 
                 Array.Resize(ref points[nmbPrims], nmbPoints);
@@ -435,9 +569,7 @@ namespace NestNET
                 nmbPoints = 0;
                 if (nmbPrims == points.Length)
                     Array.Resize(ref points, nmbPrims * 2);
-            }
-            
-            //isFigure = true;
+            }   
         }
 
 

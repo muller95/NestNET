@@ -10,7 +10,7 @@ namespace NestNET
     class Program
     {
         static string prefix = "/home/vadim/SvgFiles/SvgSamples/Svg Reader Test/";
-        static string[] figs = { "bez.svg",  "Circle.svg",  "Transform.svg",  "ёж.svg",  "фигурки1.svg" };
+        static string[] figs = { "bez.svg", "bez1.svg",  "Circle.svg",  "Transform.svg",  "ёж.svg",  "фигурки1.svg" };
         
         static void Main(string[] args)
         {
