@@ -317,6 +317,13 @@ namespace NestNET
             }
         }
 
+        private void RelToAbsArc(NestPoint[] points, NestPoint curr)
+        {
+            points[0] = points[0] + curr;
+            for (int i = 1; i < points.Length; i++)
+                points[i] = points[i] + points[i - 1];
+        }
+
         private List<List<Tuple<string, double[]>>> GetSubpaths(string cmdStr) 
         {
             List<List<Tuple<string, double[]>>> result = new List<List<Tuple<string, double[]>>>();
@@ -370,6 +377,13 @@ namespace NestNET
             return (1 - t)*(1 - t) * p[0] + 2*t * (1 - t) * p[1] + t*t * p[2];
         }
 
+        private double svgSignum(double n) {
+            if (n < 0) 
+                return -1;
+            else 
+                return 1;
+        }
+
         private void PathToPoints(XmlNode node, string transform)
         {
             Console.WriteLine("@PARSE PATH");
@@ -384,8 +398,8 @@ namespace NestNET
             bool prevCubic, prevQuadr;
             prevCubic = prevQuadr = false;
             
-            for (int s = 0; s < subPaths.Count; s++) {
-                List<Tuple<string, double[]>> commands = subPaths[s];
+            for (int sp = 0; sp < subPaths.Count; sp++) {
+                List<Tuple<string, double[]>> commands = subPaths[sp];
                 points[nmbPrims] = new NestPoint[initPoints];
                 for (int i = 0; i < commands.Count; i++) {
                     NestPoint[] pathPoints;
@@ -556,6 +570,104 @@ namespace NestNET
                                 prevQuadr = true;
                             }
 
+                        break;
+
+                        case "a":
+                        case "A":
+                            pathPoints = new NestPoint[args.Length / 7];
+                            // rx ry x-axis-rotation large-arc-flag sweep-flag x y)+
+                            double[] rxArr = new double[args.Length / 7];
+                            double[] ryArr = new double[args.Length / 7];
+                            double[] xAxisRotation = new double[args.Length / 7];
+                            double[] largeArcFlag = new double[args.Length / 7];
+                            double[] sweepFlag = new double[args.Length / 7];
+                            for (int j = 0; j < args.Length; j += 7) 
+                            {
+                                rxArr[j/7] = Math.Abs(args[j]);
+                                ryArr[j/7] = Math.Abs(args[j + 1]);
+                                xAxisRotation[j/7] = args[j + 2];
+                                largeArcFlag[j/7] = args[j + 3];
+                                sweepFlag[j/7] = args[j + 4];
+                                pathPoints[j/7] = new NestPoint(args[j + 5], args[j + 6]);
+                            }
+
+                            if (cmd == "a")
+                                RelToAbsArc(pathPoints, curr);
+
+                            
+                            for (int j = 0; j < pathPoints.Length; j++) 
+                            {
+                                double radphi = Math.PI * xAxisRotation[j] / 180.0;
+                                double rx = rxArr[j];
+                                double ry = ryArr[j];
+                                double x1 = curr.X;
+                                double y1 = curr.Y;
+                                double x2 = pathPoints[j].X;
+                                double y2 = pathPoints[j].Y;
+
+                                double newx = Math.Cos(radphi)*((x1-x2)/2) + Math.Sin(radphi)*((y1-y2)/2);
+	                            double newy = (-1) * Math.Sin(radphi)*((x1-x2)/2) + Math.Cos(radphi)*((y1-y2)/2);
+                                double lambda = (newx*newx)/(rx*rx) + (newy*newy)/(ry*ry);
+
+                                if (lambda > 1) {
+                                    rx = Math.Sqrt(lambda)*rx;
+                                    ry = Math.Sqrt(lambda)*ry;
+                                }
+
+                                double s = Math.Sqrt(Math.Abs((rx*rx * ry*ry - rx*rx * newy*newy - ry*ry * newx*newx) 
+                                    / (rx*rx * newy*newy + ry*ry * newx*newx)));
+
+                                if (largeArcFlag[j] == sweepFlag[j])
+                                    s = -s;
+                                
+                                double tcx = s * (rx*newy)/ry;
+	                            double tcy = s * ((-1)*ry*newx)/rx;
+
+                                double cx = Math.Cos(radphi)*tcx - Math.Sin(radphi)*tcy + (x1+x2)/2;
+                                double cy = Math.Sin(radphi)*tcx + Math.Cos(radphi)*tcy + (y1+y2)/2;
+
+                                double vx = (newx - tcx) / rx;
+                                double vy = (newy - tcy) / ry;
+                                double ux = 1;
+                                double uy = 0;
+                                
+                                double theta = (ux*vx + uy*vy) / (Math.Sqrt(ux*ux + uy*uy) * Math.Sqrt(vx*vx + vy*vy));
+	                            theta = Math.Acos(theta) * 180 / Math.PI;
+	                            theta = Math.Abs(theta) * svgSignum(ux*vy - vx*uy);
+
+                                ux = (newx - tcx) / rx;
+                                uy = (newy - tcy) / ry;
+                                vx = (-newx - tcx)/rx;
+                                vy = (-newy - tcy)/ry;
+                                
+                                double dtheta = (ux*vx + uy*vy) / (Math.Sqrt(ux*ux + uy*uy) * Math.Sqrt(vx*vx + vy*vy));
+                                dtheta = (Math.Acos(dtheta) * 180 / Math.PI) % 360;
+                                dtheta = Math.Abs(dtheta) * svgSignum(ux*vy - vx*uy);
+
+                                if (sweepFlag[j] == 0 && dtheta > 0)
+                                    dtheta -= 360;
+                                else if (sweepFlag[j] == 1 && dtheta < 0)
+                                    dtheta += 360;
+
+                                double arcStep = (sweepFlag[j] == 0) ? -tstep : tstep;
+
+                                for (double ang = theta; Math.Abs(ang - (theta + dtheta)) > 0.01; ang += arcStep) 
+                                {
+                                    newx = Math.Cos(radphi)*Math.Cos(ang*Math.PI/180)*rx - Math.Sin(radphi)*Math.Sin((ang*Math.PI)/180)*ry + cx;
+                                    newy = Math.Sin(radphi)*Math.Cos(ang*Math.PI/180)*rx + Math.Cos(radphi)*Math.Sin((ang*Math.PI)/180)*ry + cy;
+
+                                    points[nmbPrims][nmbPoints] = new NestPoint(newx, newy);
+                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                    if (nmbPoints == points[nmbPrims].Length)
+                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                                }
+
+                                curr = pathPoints[j].Clone();
+                            }
+
+                            
+
+                            prevCubic = prevQuadr = false;    
                         break;
                     }
 
