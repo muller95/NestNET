@@ -10,11 +10,12 @@ namespace NestNET
     class Program
     {
         static string prefix = "/home/vadim/SvgFiles/SvgSamples/Svg Reader Test/";
-        static string[] figs = { "bez.svg", "bez1.svg",  "Circle.svg",  "Transform.svg",  "ёж.svg",  "фигурки1.svg" };
+        static string[] figs = { "bez.svg", "bez1.svg",  "Circle.svg",  "Transform.svg",  "ёж.svg",  "фигурки1.svg", "move.svg", 
+            "Transform2.svg"};
         
         static void Main(string[] args)
         {
-            for (int f = 0; f < figs.Length; f++) {
+            for (int f = 3; f < 4; f++) {
                 Console.WriteLine("@DO " + figs[f]);
                 NestFigure fig = new NestFigure(prefix + figs[f]);
                 Bitmap bmp = new Bitmap(746, 1056);

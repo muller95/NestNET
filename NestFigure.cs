@@ -67,11 +67,14 @@ namespace NestNET
 
         private String RotateToString(string param)
         {
+            Console.WriteLine("param " + param);
             string[] vals = param.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
             double a = Convert.ToDouble(vals[0]);
+            a = Math.PI * a / 180.0;
             double sin = Math.Sin(a);
             double cos = Math.Cos(a);
             string mtx2 = String.Format("{0}_{1}_0_{2}_{3}_0_0_0_1", cos, -1 * sin, sin, cos);
+            Console.WriteLine("rotate a=" + vals[0] + " " + String.Format("sin={0} cos={1}", sin, cos));
             if (vals.Length < 3)
                 return mtx2;
             else
@@ -88,7 +91,9 @@ namespace NestNET
         {
             string[] vals = param.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
             double a = Convert.ToDouble(vals[0]);
+            a = Math.PI * a / 180.0;
             double tan = Math.Tan(a);
+            Console.WriteLine("a=" + vals[0] + " tan=" + tan + " " + String.Format("1_{0}_0_0_1_0_0_0_1", tan));                        
             return String.Format("1_{0}_0_0_1_0_0_0_1", tan);
         }
 
@@ -96,6 +101,7 @@ namespace NestNET
         {
             string[] vals = param.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
             double a = Convert.ToDouble(vals[0]);
+            a = Math.PI * a / 180.0;
             double tan = Math.Tan(a);
             return String.Format("1_0_0_{0}_1_0_0_0_1", tan);
         }
@@ -350,7 +356,7 @@ namespace NestNET
                     }
 
                 }
-                
+                argsStr = argsStr.Trim();
                 string[] argsStrArr = argsStr.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                 double[] args = new double[argsStrArr.Length];
                 for (int j = 0; j < args.Length; j++)
@@ -384,12 +390,10 @@ namespace NestNET
                 return 1;
         }
 
-        private void PathToPoints(XmlNode node, string transform)
+        private void PathToPoints(string cmdStr, string transform)
         {
             Console.WriteLine("@PARSE PATH");
             double[,] matrix = MultiplyTransforms(transform);
-            
-            string cmdStr = node.Attributes["d"].Value;
             
             List<List<Tuple<string, double[]>>> subPaths = GetSubpaths(cmdStr);
             NestPoint first = new NestPoint(0, 0);
@@ -419,10 +423,19 @@ namespace NestNET
                             if ("ml".IndexOf(cmd) >= 0)
                                 RelToAbsLine(pathPoints, curr);
 
-                            if (pathPoints.Length > 1 | "lL".IndexOf(cmd) >= 0) {
+                            if (pathPoints.Length > 1 || "lL".IndexOf(cmd) >= 0) {
+                                if ("mM".IndexOf(cmd) < 0) 
+                                {
+                                    points[nmbPrims][nmbPoints] = curr.Clone();
+                                    points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                       
+                                    if (nmbPoints == points[nmbPrims].Length)
+                                        Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+                                }
                                 for (int j = 0; j < pathPoints.Length; j++) {
                                     points[nmbPrims][nmbPoints] = pathPoints[j].Clone();
                                     points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                       
                                     if (nmbPoints == points[nmbPrims].Length)
                                         Array.Resize(ref points[nmbPrims], nmbPoints * 2);
                                 }
@@ -575,7 +588,6 @@ namespace NestNET
                         case "a":
                         case "A":
                             pathPoints = new NestPoint[args.Length / 7];
-                            // rx ry x-axis-rotation large-arc-flag sweep-flag x y)+
                             double[] rxArr = new double[args.Length / 7];
                             double[] ryArr = new double[args.Length / 7];
                             double[] xAxisRotation = new double[args.Length / 7];
@@ -665,8 +677,6 @@ namespace NestNET
                                 curr = pathPoints[j].Clone();
                             }
 
-                            
-
                             prevCubic = prevQuadr = false;    
                         break;
                     }
@@ -683,6 +693,46 @@ namespace NestNET
             }   
         }
 
+        private void RectToPoints(XmlNode node, string transform)
+        {
+            double rx = 0.0;
+            if (node.Attributes["rx"] != null) 
+                rx = Convert.ToDouble(node.Attributes["rx"].Value.Replace(".", ","));
+
+            double ry = 0.0;
+            if (node.Attributes["ry"] != null) 
+                ry = Convert.ToDouble(node.Attributes["ry"].Value.Replace(".", ","));
+            
+            double x = Convert.ToDouble(node.Attributes["x"].Value.Replace(".", ","));
+            double y = Convert.ToDouble(node.Attributes["y"].Value.Replace(".", ","));
+            double width = Convert.ToDouble(node.Attributes["width"].Value.Replace(".", ","));
+            double height = Convert.ToDouble(node.Attributes["height"].Value.Replace(".", ","));
+
+            string d = "M " + Convert.ToString(x + rx).Replace(",", ".") + "," + Convert.ToString(y).Replace(",", ".");
+
+            d += " L " + Convert.ToString(x + width - rx).Replace(",", ".") + "," + Convert.ToString(y).Replace(",", ".");
+
+            d += " A " + Convert.ToString(rx).Replace(",", ".") + "," + Convert.ToString(ry).Replace(",", ".") + ",0,0,1," +
+            Convert.ToString(x+width).Replace(",", ".") + "," + Convert.ToString(y+ry).Replace(",", ".");
+
+            d += " L " + Convert.ToString(x + width).Replace(",", ".") + "," + Convert.ToString(y + height - ry).Replace(",", ".");
+
+            d += " A " + Convert.ToString(rx).Replace(",", ".") + "," + Convert.ToString(ry).Replace(",", ".") + ",0,0,1," +
+            Convert.ToString(x+width-rx).Replace(",", ".") + "," + Convert.ToString(y+height).Replace(",", ".");
+
+            d += " L " + Convert.ToString(x + rx).Replace(",", ".") + "," + Convert.ToString(y + height).Replace(",", ".");
+
+            d += " A " + Convert.ToString(rx).Replace(",", ".") + "," + Convert.ToString(ry).Replace(",", ".") + ",0,0,1," +
+            Convert.ToString(x).Replace(",", ".") + "," + Convert.ToString(y+height-ry).Replace(",", ".");
+
+            d += " L " + Convert.ToString(x).Replace(",", ".") + "," + Convert.ToString(y + ry).Replace(",", ".");
+
+            d += " A " + Convert.ToString(rx).Replace(",", ".") + "," + Convert.ToString(ry).Replace(",", ".") + ",0,0,1," +
+            Convert.ToString(x+rx).Replace(",", ".") + "," + Convert.ToString(y).Replace(",", ".");
+            
+            PathToPoints(d, transform);
+        }
+
 
         private void ApproxIfFigure(XmlNode node, string transform)
         {
@@ -692,6 +742,7 @@ namespace NestNET
             switch (node.Name)
             {
                 case "rect":
+                    RectToPoints(node, transform);
                     break;
                 case "circle":
                     CircleToPoints(node, transform);
@@ -709,7 +760,7 @@ namespace NestNET
                     PolygonToPoints(node, transform);
                     break;
                 case "path":
-                    PathToPoints(node, transform);
+                    PathToPoints(node.Attributes["d"].Value, transform);
                     break;
             }
 
