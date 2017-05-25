@@ -67,14 +67,12 @@ namespace NestNET
 
         private String RotateToString(string param)
         {
-            Console.WriteLine("param " + param);
             string[] vals = param.Split(new char[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
             double a = Convert.ToDouble(vals[0]);
             a = Math.PI * a / 180.0;
             double sin = Math.Sin(a);
             double cos = Math.Cos(a);
-            string mtx2 = String.Format("{0}_{1}_0_{2}_{3}_0_0_0_1", cos, -1 * sin, sin, cos);
-            Console.WriteLine("rotate a=" + vals[0] + " " + String.Format("sin={0} cos={1}", sin, cos));
+            string mtx2 = String.Format("{0}_{1}_0_{2}_{3}_0_0_0_1", cos, -sin, sin, cos);
             if (vals.Length < 3)
                 return mtx2;
             else
@@ -93,7 +91,6 @@ namespace NestNET
             double a = Convert.ToDouble(vals[0]);
             a = Math.PI * a / 180.0;
             double tan = Math.Tan(a);
-            Console.WriteLine("a=" + vals[0] + " tan=" + tan + " " + String.Format("1_{0}_0_0_1_0_0_0_1", tan));                        
             return String.Format("1_{0}_0_0_1_0_0_0_1", tan);
         }
 
@@ -156,7 +153,7 @@ namespace NestNET
             string[] vals = transform.Split(new char[] { '_' });
 
             for (int i = 0; i < vals.Length; i++)
-                matrix[i / 3, i % 3] = double.Parse(vals[i], NumberStyles.Any, CultureInfo.InvariantCulture);
+                matrix[i / 3, i % 3] = Convert.ToDouble(vals[i].Replace(".", ","));
 
             return matrix;
         }
@@ -392,7 +389,6 @@ namespace NestNET
 
         private void PathToPoints(string cmdStr, string transform)
         {
-            Console.WriteLine("@PARSE PATH");
             double[,] matrix = MultiplyTransforms(transform);
             
             List<List<Tuple<string, double[]>>> subPaths = GetSubpaths(cmdStr);
@@ -435,7 +431,6 @@ namespace NestNET
                                 for (int j = 0; j < pathPoints.Length; j++) {
                                     points[nmbPrims][nmbPoints] = pathPoints[j].Clone();
                                     points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
-                                       
                                     if (nmbPoints == points[nmbPrims].Length)
                                         Array.Resize(ref points[nmbPrims], nmbPoints * 2);
                                 }
