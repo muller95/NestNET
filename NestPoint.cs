@@ -56,7 +56,7 @@ namespace NestNET
 
         public override string ToString() 
         {
-            return String.Format("({0}, {1})", x, y);
+            return String.Format("{0} {1}", x, y).Replace(",", ".");
         }
 
         public static NestPoint operator +(NestPoint a, NestPoint b) 
