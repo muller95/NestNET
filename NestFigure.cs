@@ -406,7 +406,7 @@ namespace NestNET
                     string cmd = commands[i].Item1;
                     double[] args = commands[i].Item2;            
                     int degree;
-                    
+                        
                     switch (cmd) {
                         case "m":
                         case "M":
@@ -449,7 +449,6 @@ namespace NestNET
                             if (nmbPoints == points[nmbPrims].Length)
                                 Array.Resize(ref points[nmbPrims], nmbPoints * 2);
                             curr = first.Clone();
-
                             prevCubic = prevQuadr = false;
                         break;
 
@@ -471,6 +470,13 @@ namespace NestNET
 
                             if ("vh".IndexOf(cmd) >= 0)
                                 RelToAbsLine(pathPoints, curr);
+
+                            points[nmbPrims][nmbPoints] = curr.Clone();
+                            points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
+                                
+                            if (nmbPoints == points[nmbPrims].Length)
+                                Array.Resize(ref points[nmbPrims], nmbPoints * 2);
+
                             for (int j = 0; j < pathPoints.Length; j++) {
                                 points[nmbPrims][nmbPoints] = pathPoints[j].Clone();
                                 points[nmbPrims][nmbPoints++].ApplyTransform(matrix);
